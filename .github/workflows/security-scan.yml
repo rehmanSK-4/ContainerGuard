@@ -1,0 +1,113 @@
+name: Container Security & Vulnerability Scan
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      fail_threshold:
+        description: 'Vulnerability severity threshold to fail build'
+        required: true
+        default: 'CRITICAL'
+        type: choice
+        options:
+          - 'CRITICAL'
+          - 'HIGH,CRITICAL'
+          - 'MEDIUM,HIGH,CRITICAL'
+
+jobs:
+  test-backend:
+    name: Backend Unit Tests & Pytest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Backend Pytest Suite
+        run: |
+          PYTHONPATH=backend pytest backend/tests -v
+
+  test-frontend:
+    name: Frontend TypeScript & Vite Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package.json
+
+      - name: Install Frontend Dependencies
+        run: |
+          npm --prefix frontend ci || npm --prefix frontend install
+
+      - name: Build Frontend Application
+        run: |
+          npm --prefix frontend run build
+
+  container-security-scan:
+    name: Build & Trivy Vulnerability Inspection
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    env:
+      SEVERITY_THRESHOLD: ${{ inputs.fail_threshold || 'CRITICAL' }}
+      IMAGE_TAG: containerguard-backend:${{ github.sha }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          load: true
+          tags: ${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Execute Trivy Vulnerability Scan (Generate JSON Report)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_TAG }}
+          format: 'json'
+          output: 'trivy-security-report.json'
+          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+
+      - name: Execute Trivy Security Gate (Fail on Threshold)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_TAG }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: ${{ env.SEVERITY_THRESHOLD }}
+
+      - name: Upload Security Audit Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: containerguard-trivy-report-${{ github.sha }}
+          path: trivy-security-report.json
+          retention-days: 30
