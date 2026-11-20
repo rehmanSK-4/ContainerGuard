@@ -1,0 +1,21 @@
+---
+- name: Configure ContainerGuard Project
+  hosts: containerguard
+  connection: local
+
+  tasks:
+    - name: Create Ansible configuration directory
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/config"
+        state: directory
+        mode: '0755'
+
+    - name: Create project information file
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/config/project-info.txt"
+        content: |
+          Project: ContainerGuard
+          Backend: FastAPI
+          Frontend: React
+          Automation: Ansible
+

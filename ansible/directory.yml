@@ -1,0 +1,24 @@
+---
+- name: Create ContainerGuard Directory and File
+  hosts: containerguard
+  connection: local
+
+  tasks:
+    - name: Create student directory
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/student"
+        state: directory
+        mode: '0755'
+
+    - name: Create information file
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/student/info.txt"
+        content: |
+          Student DevOps Lab
+          Project: ContainerGuard
+          Tool: Ansible
+          Practical: Week 10
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg: "Directory and file created successfully"

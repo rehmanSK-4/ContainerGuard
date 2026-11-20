@@ -1,0 +1,51 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: containerguard-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:////app/data/containerguard.db
+      - REPORTS_DIR=/app/reports
+      - TRIVY_PATH=/usr/local/bin/trivy
+      - SCAN_TIMEOUT_SECONDS=300
+    volumes:
+      - backend-data:/app/data
+      - backend-reports:/app/reports
+      # =========================================================================
+      # SECURITY WARNING: DOCKER SOCKET MOUNT
+      # Mounting /var/run/docker.sock grants container processes root-equivalent
+      # access to the host Docker daemon. This allows Trivy to scan local images
+      # directly from host caches. This setup is intended STRICTLY for trusted
+      # local development, never for untrusted or publicly exposed production hosts.
+      # =========================================================================
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - containerguard-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: containerguard-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - containerguard-network
+
+volumes:
+  backend-data:
+    name: containerguard-db-data
+  backend-reports:
+    name: containerguard-reports-data
+
+networks:
+  containerguard-network:
+    name: containerguard-net
+    driver: bridge

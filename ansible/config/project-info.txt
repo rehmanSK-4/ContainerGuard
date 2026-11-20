@@ -1,0 +1,4 @@
+Project: ContainerGuard
+Backend: FastAPI
+Frontend: React
+Automation: Ansible
